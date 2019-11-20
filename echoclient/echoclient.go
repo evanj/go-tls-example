@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"net"
 	"os"
 
@@ -41,12 +42,14 @@ func main() {
 	// clientCertificate := flag.Int("clientCert", -1, "If true, skips verifying the server")
 	flag.Parse()
 
-	if *useTLS {
-		panic("todo")
-	}
-
 	fmt.Printf("echoclient: connecting to %s useTLS:%t ...\n", *addr, *useTLS)
-	conn, err := net.Dial("tcp", *addr)
+	var conn net.Conn
+	var err error
+	if *useTLS {
+		conn, err = tls.Dial("tcp", *addr, nil)
+	} else {
+		conn, err = net.Dial("tcp", *addr)
+	}
 	if err != nil {
 		panic(err)
 	}
