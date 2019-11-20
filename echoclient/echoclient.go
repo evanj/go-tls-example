@@ -37,16 +37,24 @@ func main() {
 	addr := flag.String("addr", "localhost:7000", "echo server address")
 	useTLS := flag.Bool("useTLS", true, "Use TLS. If false, uses an unencrypted TCP connection")
 	// testSessionTickets := flag.Bool("testSessionTickets", false, "Enable session cache and make a second request to test session resumption")
-	// insecureSkipVerify := flag.Bool("insecureSkipVerify", false, "skips verifying the server's certificate")
+	insecureSkipVerify := flag.Bool("insecureSkipVerify", false, "skips verifying the server's certificate")
 	// trustServer := flag.Bool("trustServer", false, "If true, trusts the server certificate")
 	// clientCertificate := flag.Int("clientCert", -1, "If true, skips verifying the server")
+	// trustedRootPath := flag.String("trustedRoot", "", "path to a trusted root certificate")
 	flag.Parse()
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: *insecureSkipVerify,
+	}
 
 	fmt.Printf("echoclient: connecting to %s useTLS:%t ...\n", *addr, *useTLS)
 	var conn net.Conn
 	var err error
 	if *useTLS {
-		conn, err = tls.Dial("tcp", *addr, nil)
+		if *insecureSkipVerify {
+			fmt.Println("echoclient WARNING: using insecureSkipVerify")
+		}
+		conn, err = tls.Dial("tcp", *addr, tlsConfig)
 	} else {
 		conn, err = net.Dial("tcp", *addr)
 	}

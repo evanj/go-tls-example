@@ -111,6 +111,10 @@ func main() {
 		// client fails due to using global trusted root CAs
 		{"server TLS; client global trusted TLS", []string{}, serverCertKeyArgs,
 			"panic: x509: certificate signed by unknown authority", true},
+
+		// client trusts any server
+		{"server TLS; client global trusted TLS", []string{"--insecureSkipVerify"}, serverCertKeyArgs,
+			expectedSuccessOutput, false},
 	}
 
 	for i, config := range configs {
