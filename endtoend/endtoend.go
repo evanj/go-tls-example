@@ -93,6 +93,7 @@ func main() {
 	echoserverPath := flag.String("echoserverPath", "", "path to the echoserver binary")
 	serverCertPath := flag.String("serverCertPath", "", "path to the server certificate")
 	serverKeyPath := flag.String("serverKeyPath", "", "path to the server key")
+	caCertPath := flag.String("caCertPath", "", "path to the certificate authority root certificate")
 	localhostPort := flag.Int("localhostPort", 7123, "port to listen on locally")
 	flag.Parse()
 
@@ -114,6 +115,10 @@ func main() {
 
 		// client trusts any server
 		{"server TLS; client global trusted TLS", []string{"--insecureSkipVerify"}, serverCertKeyArgs,
+			expectedSuccessOutput, false},
+
+		// client trusts only our root CA
+		{"server TLS; client global trusted TLS", []string{"--trustedRoot=" + *caCertPath}, serverCertKeyArgs,
 			expectedSuccessOutput, false},
 	}
 

@@ -3,35 +3,14 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
-	"net"
-	"os"
-
-	// "crypto/tls"
-	// "crypto/x509"
-	// "errors"
+	"crypto/x509"
+	"errors"
 	"flag"
 	"fmt"
-	// "io/ioutil"
+	"io/ioutil"
+	"net"
+	"os"
 )
-
-// func makeRequest(addr string, config *tls.Config) error {
-// 	c, err := tls.Dial("tcp", addr, config)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	fmt.Println("writing...")
-// 	_, err = c.Write([]byte("hello world\n"))
-// 	if err != nil {
-// 		return err
-// 	}
-// 	fmt.Println("reading...")
-// 	output, err := ioutil.ReadAll(c)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	fmt.Println("read:", string(output))
-// 	return c.Close()
-// }
 
 func main() {
 	addr := flag.String("addr", "localhost:7000", "echo server address")
@@ -40,11 +19,27 @@ func main() {
 	insecureSkipVerify := flag.Bool("insecureSkipVerify", false, "skips verifying the server's certificate")
 	// trustServer := flag.Bool("trustServer", false, "If true, trusts the server certificate")
 	// clientCertificate := flag.Int("clientCert", -1, "If true, skips verifying the server")
-	// trustedRootPath := flag.String("trustedRoot", "", "path to a trusted root certificate")
+	trustedRootPath := flag.String("trustedRoot", "", "path to a trusted root certificate")
 	flag.Parse()
+
+	var certPool *x509.CertPool
+	if *trustedRootPath != "" {
+		certBytes, err := ioutil.ReadFile(*trustedRootPath)
+		if err != nil {
+			panic(err)
+		}
+
+		certPool = x509.NewCertPool()
+		ok := certPool.AppendCertsFromPEM([]byte(certBytes))
+		if !ok {
+			panic(errors.New("caCert did not contain any certificates"))
+		}
+		fmt.Printf("echoclient: added cert=%s as the trusted certificate\n", *trustedRootPath)
+	}
 
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: *insecureSkipVerify,
+		RootCAs:            certPool,
 	}
 
 	fmt.Printf("echoclient: connecting to %s useTLS:%t ...\n", *addr, *useTLS)

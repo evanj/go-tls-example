@@ -32,5 +32,5 @@ echo "*** building and running test ..."
 go build -o echoclient-bin ${PACKAGE_ROOT}/echoclient
 go build -o echoserver-bin ${PACKAGE_ROOT}/echoserver 
 go run ${PACKAGE_ROOT}/endtoend --echoclientPath=./echoclient-bin --echoserverPath=./echoserver-bin \
-  --serverCertPath=servercert.pem --serverKeyPath=serverkey.pem
+  --serverCertPath=servercert.pem --serverKeyPath=serverkey.pem --caCertPath=cacert.pem
 
