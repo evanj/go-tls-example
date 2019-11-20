@@ -1,0 +1,11 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: golang:1.13.4-buster
+    working_directory: /go/src/github.com/evanj/go-tls-example
+    steps:
+      - checkout
+      - run:
+          name: run tests
+          command: ./circleci.sh
