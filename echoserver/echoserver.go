@@ -6,8 +6,11 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 )
 
@@ -80,12 +83,36 @@ func handleConn(conn net.Conn) {
 	fmt.Printf("echoserver connection from %s closed\n", clientAddrString)
 }
 
-func listenTLS(addr string, serverCertPath string, serverKeyPath string) (net.Listener, error) {
+func listenTLS(
+	addr string, serverCertPath string, serverKeyPath string, clientCARootCertPath string,
+) (net.Listener, error) {
 	cert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
 	if err != nil {
 		return nil, err
 	}
-	cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
+
+	var certPool *x509.CertPool
+	clientAuth := tls.NoClientCert
+	if clientCARootCertPath != "" {
+		certBytes, err := ioutil.ReadFile(clientCARootCertPath)
+		if err != nil {
+			return nil, err
+		}
+
+		certPool = x509.NewCertPool()
+		ok := certPool.AppendCertsFromPEM(certBytes)
+		if !ok {
+			return nil, errors.New("caCert did not contain any certificates")
+		}
+		clientAuth = tls.RequireAndVerifyClientCert
+		fmt.Printf("echoserver: requiring cert=%s for verifying client certificates\n", clientCARootCertPath)
+	}
+
+	cfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientCAs:    certPool,
+		ClientAuth:   clientAuth,
+	}
 	return tls.Listen("tcp", addr, cfg)
 }
 
@@ -93,20 +120,16 @@ func main() {
 	addr := flag.String("addr", ":7000", "listen address")
 	certPath := flag.String("cert", "", "path to the server cert")
 	keyPath := flag.String("key", "", "path to the server key")
-	// msglen := flag.Int("msglen", 0, "If > 0, read a fixed size message (needed for TLS: no CloseWrite)")
-	// requestClientCert := flag.Bool("requestClientCert", false, "Request client certificate")
-	// requireClientCert := flag.Bool("requireClientCert", false, "Require client certificate")
-	// verifyClientCert := flag.Bool("verifyClientCert", false, "Require client certificate (use -trustSelf)")
-	// trustSelf := flag.Bool("trustSelf", false, "Trust client certificates signed by us. "+
-	// 	"Correct clients (e.g. Go) only send matching certificates, so this may cause no certificate errors.")
+	clientCARootCertPath := flag.String("clientCARootCert", "",
+		"Path to the root CA certificate to verify client certs")
 	flag.Parse()
 
 	var listener net.Listener
 	var err error
-	if *certPath != "" && *keyPath != "" {
+	if *certPath != "" {
 		fmt.Printf("echoserver listening for TLS with addr=%s cert=%s key=%s\n",
 			*addr, *certPath, *keyPath)
-		listener, err = listenTLS(*addr, *certPath, *keyPath)
+		listener, err = listenTLS(*addr, *certPath, *keyPath, *clientCARootCertPath)
 	} else {
 		fmt.Printf("echoserver listening without TLS with addr=%s\n", *addr)
 		listener, err = net.Listen("tcp", *addr)

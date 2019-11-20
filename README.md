@@ -114,6 +114,13 @@ Certificate:
          ...
 ```
 
+### Generate the client key and certificate
+
+Follow the same process above. In this case, the CN (common name) is less important or clear.
+Unless I find better recommendations, it seems useful to put something human understandable in
+this, to help identify the client.
+
+
 ### Certificate recommendations
 
 See https://wiki.mozilla.org/Security/Server_Side_TLS
