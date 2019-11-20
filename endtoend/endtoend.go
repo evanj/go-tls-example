@@ -81,6 +81,8 @@ func runTest(
 		} else {
 			return err
 		}
+	} else if config.expectFailure {
+		return errors.New("expected echoclient to fail but it did not")
 	}
 	if !bytes.Contains(output, []byte(config.expectedOutput)) {
 		return errors.New("echoclient did not contain expected output")
@@ -94,6 +96,8 @@ func main() {
 	serverCertPath := flag.String("serverCertPath", "", "path to the server certificate")
 	serverKeyPath := flag.String("serverKeyPath", "", "path to the server key")
 	caCertPath := flag.String("caCertPath", "", "path to the certificate authority root certificate")
+	clientCertPath := flag.String("clientCertPath", "", "path to the client certificate")
+	clientKeyPath := flag.String("clientKeyPath", "", "path to the client key")
 	localhostPort := flag.Int("localhostPort", 7123, "port to listen on locally")
 	flag.Parse()
 
@@ -101,6 +105,10 @@ func main() {
 	fmt.Printf("using listenAddr=%s\n", listenAddr)
 
 	serverCertKeyArgs := []string{"--cert=" + *serverCertPath, "--key=" + *serverKeyPath}
+	serverArgsWithClientCerts := append(serverCertKeyArgs, "--clientCARootCert="+*caCertPath)
+	clientTrustedRoot := []string{"--trustedRoot=" + *caCertPath}
+	clientTrustedRootAndCert := append(clientTrustedRoot,
+		"--cert="+*clientCertPath, "--key="+*clientKeyPath)
 
 	configs := []*testConfiguration{
 		{"no TLS (plain TCP)", []string{"--useTLS=false"}, []string{}, expectedSuccessOutput, false},
@@ -118,7 +126,16 @@ func main() {
 			expectedSuccessOutput, false},
 
 		// client trusts only our root CA
-		{"server TLS; client global trusted TLS", []string{"--trustedRoot=" + *caCertPath}, serverCertKeyArgs,
+		{"server TLS; client global trusted TLS", clientTrustedRoot, serverCertKeyArgs,
+			expectedSuccessOutput, false},
+
+		// server requires a client certificate
+		// TODO: server prints: tls: client didn't provide a certificate
+		{"missing client certificate", clientTrustedRoot, serverArgsWithClientCerts,
+			"panic: unexpected end of data from server", true},
+
+		// client and server have valid certificates
+		{"both have certificates", clientTrustedRootAndCert, serverArgsWithClientCerts,
 			expectedSuccessOutput, false},
 	}
 

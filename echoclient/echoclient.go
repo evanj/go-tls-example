@@ -17,10 +17,20 @@ func main() {
 	useTLS := flag.Bool("useTLS", true, "Use TLS. If false, uses an unencrypted TCP connection")
 	// testSessionTickets := flag.Bool("testSessionTickets", false, "Enable session cache and make a second request to test session resumption")
 	insecureSkipVerify := flag.Bool("insecureSkipVerify", false, "skips verifying the server's certificate")
-	// trustServer := flag.Bool("trustServer", false, "If true, trusts the server certificate")
-	// clientCertificate := flag.Int("clientCert", -1, "If true, skips verifying the server")
+	clientCertPath := flag.String("cert", "", "path to a client certificate to use")
+	clientKeyPath := flag.String("key", "", "path to a client key to use")
 	trustedRootPath := flag.String("trustedRoot", "", "path to a trusted root certificate")
 	flag.Parse()
+
+	certificates := []tls.Certificate{}
+	if *clientCertPath != "" {
+		cert, err := tls.LoadX509KeyPair(*clientCertPath, *clientKeyPath)
+		if err != nil {
+			panic(err)
+		}
+		certificates = []tls.Certificate{cert}
+		fmt.Printf("echoclient: using client cert=%s key=%s\n", *clientCertPath, *clientKeyPath)
+	}
 
 	var certPool *x509.CertPool
 	if *trustedRootPath != "" {
@@ -30,7 +40,7 @@ func main() {
 		}
 
 		certPool = x509.NewCertPool()
-		ok := certPool.AppendCertsFromPEM([]byte(certBytes))
+		ok := certPool.AppendCertsFromPEM(certBytes)
 		if !ok {
 			panic(errors.New("caCert did not contain any certificates"))
 		}
@@ -40,6 +50,7 @@ func main() {
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: *insecureSkipVerify,
 		RootCAs:            certPool,
+		Certificates:       certificates,
 	}
 
 	fmt.Printf("echoclient: connecting to %s useTLS:%t ...\n", *addr, *useTLS)
