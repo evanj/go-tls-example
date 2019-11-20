@@ -1,4 +1,4 @@
-#!/bin/bassh
+#!/bin/bash
 # Runs checks on CircleCI
 set -euf -o pipefail
 
@@ -27,5 +27,7 @@ CHANGED=$(git status --porcelain --untracked-files=no)
 if [ -n "${CHANGED}" ]; then
     echo "ERROR files were changed:" > /dev/stderr
     echo "$CHANGED" > /dev/stderr
+    echo
+    diff -u | head -n 100
     exit 10
 fi
