@@ -1,0 +1,15 @@
+runtime: python27
+api_version: 1
+threadsafe: true
+
+service: tlstest
+
+handlers:
+- url: /.*
+  script: app.app
+  secure: always
+  login: admin
+
+libraries:
+- name: ssl
+  version: latest
