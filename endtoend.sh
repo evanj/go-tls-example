@@ -20,16 +20,16 @@ basicConstraints = critical, CA:true
 keyUsage = critical, digitalSignature, cRLSign, keyCertSign
 HERE
 
-openssl ecparam -genkey -out cakey.pem -name prime256v1
-openssl req -new -x509 -sha256 -key cakey.pem -out cacert.pem -config ca_config.cnf -extensions v3_ca_config -days 3650 -subj "/O=Example Inc/CN=Example Inc Root CA" 
+openssl ecparam -genkey -name prime256v1 -out cakey.pem
+openssl req -new -x509 -key cakey.pem -config ca_config.cnf -extensions v3_ca_config -days 3650 -sha256 -subj "/O=Example Inc/CN=Example Inc Root CA" -out cacert.pem
 
-openssl ecparam -genkey -out serverkey.pem -name prime256v1
-openssl req -new -sha256 -key serverkey.pem -out serverkey.csr -days 1095 -subj "/O=Example Inc/CN=localhost"
-openssl x509 -req -in serverkey.csr -CA cacert.pem -CAkey cakey.pem -CAcreateserial -out servercert.pem -days 1095
+openssl ecparam -genkey -name prime256v1 -out serverkey.pem
+openssl req -new -subj "/O=Example Inc/CN=localhost" -key serverkey.pem -out serverkey.csr
+openssl x509 -req -CA cacert.pem -CAkey cakey.pem -CAcreateserial -days 1095 -sha256 -in serverkey.csr -out servercert.pem
 
-openssl ecparam -genkey -out clientkey.pem -name prime256v1
-openssl req -new -sha256 -key clientkey.pem -out clientkey.csr -days 1095 -subj "/O=Example Inc/CN=clientcert.example.com"
-openssl x509 -req -in clientkey.csr -CA cacert.pem -CAkey cakey.pem -CAcreateserial -out clientcert.pem -days 1095
+openssl ecparam -genkey -name prime256v1 -out clientkey.pem 
+openssl req -new -subj "/O=Example Inc/CN=clientcert.example.com" -key clientkey.pem -out clientkey.csr
+openssl x509 -req -CA cacert.pem -CAkey cakey.pem -CAcreateserial -days 1095 -sha256 -in clientkey.csr -out clientcert.pem
 
 
 # build and run the end-to-end test!
@@ -40,5 +40,3 @@ go run ${PACKAGE_ROOT}/endtoend --echoclientPath=./echoclient-bin --echoserverPa
   --serverCertPath=servercert.pem --serverKeyPath=serverkey.pem \
   --caCertPath=cacert.pem \
   --clientCertPath=clientcert.pem --clientKeyPath=clientkey.pem
-
-

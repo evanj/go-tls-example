@@ -59,14 +59,13 @@ basicConstraints = critical, CA:true
 keyUsage = critical, digitalSignature, cRLSign, keyCertSign
 ```
 
-Generate the key and certificate:
+Generate the root key and certificate using ECDSA P-256 keys and SHA256 signatures:
 ```
-openssl ecparam -genkey -out cakey.pem -name prime256v1
-openssl req -new -x509 -sha256 -key cakey.pem -out cacert.pem -config ca_config.cnf -extensions v3_ca_config -days 3650 -subj "/O=Example Inc/CN=Example Inc Root CA" 
+openssl ecparam -genkey -name prime256v1 -out cakey.pem
+openssl req -new -x509 -key cakey.pem -config ca_config.cnf -extensions v3_ca_config -days 3650 -sha256 -subj "/O=Example Inc/CN=Example Inc Root CA" -out cacert.pem
 ```
 
-You can inspect the certificate with `openssl x509 -text -in cacert.pem -noout`:
-
+You can inspect the certificate with `openssl x509 -text -noout -in cacert.pem`:
 ```
 Certificate:
     Data:
@@ -108,19 +107,19 @@ The process is:
 3. Use the certificate authorite (CA) key to take the CSR and produce the signed certificate.
 
 ```
-openssl ecparam -genkey -out serverkey.pem -name prime256v1
-openssl req -new -sha256 -key serverkey.pem -out serverkey.csr -days 1095 -subj "/O=Example Inc/CN=localhost"
-openssl x509 -req -in serverkey.csr -CA cacert.pem -CAkey cakey.pem -CAcreateserial -out servercert.pem -days 1095
+openssl ecparam -genkey -name prime256v1 -out serverkey.pem
+openssl req -new -subj "/O=Example Inc/CN=localhost" -key serverkey.pem -out serverkey.csr
+openssl x509 -req -CA cacert.pem -CAkey cakey.pem -CAcreateserial -days 1095 -sha256 -in serverkey.csr -out servercert.pem
 ```
 
-Inspecting the generated certificate with `openssl x509 -text -in servercert.pem -noout`:
+Inspecting the generated certificate with `openssl x509 -text -noout -in servercert.pem`:
 
 ```
 Certificate:
     Data:
         Version: 1 (0x0)
         Serial Number: 15839831314861158550 (0xdbd262a868687096)
-    Signature Algorithm: ecdsa-with-SHA1
+    Signature Algorithm: ecdsa-with-SHA256
         Issuer: O=Example Inc, CN=Example Inc Root CA
         Validity
             Not Before: Nov 20 18:52:33 2019 GMT
@@ -133,7 +132,7 @@ Certificate:
                     ...
                 ASN1 OID: prime256v1
                 NIST CURVE: P-256
-    Signature Algorithm: ecdsa-with-SHA1
+    Signature Algorithm: ecdsa-with-SHA256
          ...
 ```
 
