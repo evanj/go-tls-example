@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,30 +15,17 @@ import (
 	"net"
 )
 
-// Key/cert recommendations from https://wiki.mozilla.org/Security/Server_Side_TLS
-// How to do this "properly" see:
-// https://jamielinux.com/docs/openssl-certificate-authority/appendix/root-configuration-file.html
+// from https://golang.org/src/crypto/tls/cipher_suites.go
+var cipherSuiteNames = map[uint16]string{
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+	tls.TLS_AES_128_GCM_SHA256:                  "TLS_AES_128_GCM_SHA256",
+}
 
-// NOTE: We can use a single server and authority key! It might be better to use separate.
-
-// Create the server/CA key
-// openssl ecparam -genkey -out cakey.pem -name prime256v1
-// openssl req -new -x509 -sha256 -key cakey.pem -out cacert.pem -days 1095 -subj "/O=Bluecore Inc/CN=localhost"
-
-// Create the client key and certificate, signed by the CA key
-
-// To use a separate CA and server:
-
-// Create the CA key and cert
-// openssl ecparam -genkey -out cakey.pem -name prime256v1
-// openssl req -new -x509 -sha256 -key cakey.pem -out cacert.pem -days 1095 -subj "/O=Bluecore Inc"
-// NOTE: This won't have CA:TRUE or key usage bits; -extensions v3_ca might help
-
-// Create the server key and cert
-// openssl ecparam -genkey -out serverkey.pem -name prime256v1
-// openssl req -new -sha256 -key serverkey.pem -out serverkey.csr -days 1095 -subj "/O=Bluecore Inc/CN=localhost"
-// openssl x509 -req -in serverkey.csr -CA cacert.pem -CAkey cakey.pem -CAcreateserial -out servercert.pem -days 1095
-// check it with: openssl x509 -text -in cert.pem -noout
+// from https://golang.org/src/crypto/tls/common.go
+var versionNames = map[uint16]string{
+	tls.VersionTLS12: "TLS12",
+	tls.VersionTLS13: "TLS13",
+}
 
 // Returns a unique binary representation for pub. This can be used to identify specific clients.
 func marshalPublicKey(pub interface{}) ([]byte, error) {
@@ -56,31 +44,77 @@ func marshalPublicKey(pub interface{}) ([]byte, error) {
 	return publicKeyBytes, err
 }
 
-func handleConn(conn net.Conn) {
+// Echos lines from conn and closes it.
+func handleConn(logger serverLogger, conn net.Conn) error {
 	defer conn.Close()
 
-	clientAddrString := conn.RemoteAddr().String()
-	fmt.Printf("echoserver connection from %s\n", clientAddrString)
+	if tlsConn, ok := conn.(*tls.Conn); ok {
+		if !tlsConn.ConnectionState().HandshakeComplete {
+			logger.logf("completing TLS handshake ...")
+			err := tlsConn.Handshake()
+			if err != nil {
+				return err
+			}
+		}
+		state := tlsConn.ConnectionState()
+		logger.logf("  DidResume: %t", state.DidResume)
+		logger.logf("  CipherSuite: 0x%04x (%s)", state.CipherSuite, cipherSuiteNames[state.CipherSuite])
+		logger.logf("  Version: 0x%04x (%s)", state.Version, versionNames[state.Version])
+		if len(state.PeerCertificates) > 0 {
+			logger.logf("  Peer certificates: %d", len(state.PeerCertificates))
+			logger.logf("  Peer 1 Issuer: %s", state.PeerCertificates[0].Issuer.ToRDNSequence())
+			logger.logf("  Peer 1 Subject: %s", state.PeerCertificates[0].Subject.ToRDNSequence())
+			logger.logf("  Peer 1 Serial Number: %s", hex.EncodeToString(state.PeerCertificates[0].SerialNumber.Bytes()))
+			logger.logf("  Peer 1 Subject Key ID: %s", hex.EncodeToString(state.PeerCertificates[0].SubjectKeyId))
+			logger.logf("  Peer 1 Authority ID: %s", hex.EncodeToString(state.PeerCertificates[0].AuthorityKeyId))
+			// matches the output shown in browsers and openssl -text
+			pubKey, err := marshalPublicKey(state.PeerCertificates[0].PublicKey)
+			if err != nil {
+				return err
+			}
+			logger.logf("  Peer 1 Public Key: %s", hex.EncodeToString(pubKey))
+		}
+	}
+
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
-		fmt.Printf("echoserver read from %s: %s; echoing ...\n", clientAddrString, scanner.Text())
+		logger.logf("read %#v; echoing ...", scanner.Text())
 
 		lineWithNewLine := append(scanner.Bytes(), '\n')
 		_, err := conn.Write(lineWithNewLine)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
 	if scanner.Err() != nil {
-		fmt.Printf("echoserver ERROR from %s closing connection: %s\n", clientAddrString, scanner.Err().Error())
-		return
+		return scanner.Err()
 	}
 
-	err := conn.Close()
+	return conn.Close()
+}
+
+type serverLogger interface {
+	logf(message string, args ...interface{})
+}
+
+type clientLogger struct {
+	clientAddrString string
+}
+
+func (c *clientLogger) logf(message string, args ...interface{}) {
+	args = append([]interface{}{c.clientAddrString}, args...)
+	fmt.Printf("echoserver %s: "+message+"\n", args...)
+}
+
+func handleConnGoroutine(conn net.Conn) {
+	logger := &clientLogger{conn.RemoteAddr().String()}
+	logger.logf("connection started")
+	err := handleConn(logger, conn)
 	if err != nil {
-		panic(err)
+		logger.logf("ERROR %s (connection closed)", err.Error())
+	} else {
+		logger.logf("connection closed (no error)")
 	}
-	fmt.Printf("echoserver connection from %s closed\n", clientAddrString)
 }
 
 func listenTLS(
@@ -117,7 +151,7 @@ func listenTLS(
 }
 
 func main() {
-	addr := flag.String("addr", ":7000", "listen address")
+	addr := flag.String("addr", "localhost:7000", "listen address")
 	certPath := flag.String("cert", "", "path to the server cert")
 	keyPath := flag.String("key", "", "path to the server key")
 	clientCARootCertPath := flag.String("clientCARootCert", "",
@@ -143,94 +177,6 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		go handleConn(conn)
+		go handleConnGoroutine(conn)
 	}
-
-	// authType := tls.NoClientCert
-	// if *requestClientCert {
-	// 	fmt.Println("requesting client certificates")
-	// 	authType = tls.RequestClientCert
-	// } else if *requireClientCert {
-	// 	fmt.Println("requiring any client certificate")
-	// 	authType = tls.RequireAnyClientCert
-	// } else if *verifyClientCert {
-	// 	fmt.Println("requiring a verified client certificate")
-	// 	authType = tls.RequireAndVerifyClientCert
-	// }
-
-	// var certPool *x509.CertPool
-	// if *trustSelf {
-	// 	certPool = x509.NewCertPool()
-	// 	ok := certPool.AppendCertsFromPEM([]byte(rsaCert))
-	// 	// ok := certPool.AppendCertsFromPEM([]byte(certificateWithCN))
-	// 	if !ok {
-	// 		panic(errors.New("no valid certificates parsed"))
-	// 	}
-	// 	fmt.Println("Trusting own key/certificate to validate client certificates")
-	// }
-
-	// listener, err := listenTLS(*addr, authType, certPool)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// for {
-	// 	c, err := listener.Accept()
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	fmt.Println("connection from", c.RemoteAddr().String())
-
-	// 	if tlsConn, ok := c.(*tls.Conn); ok {
-	// 		if !tlsConn.ConnectionState().HandshakeComplete {
-	// 			fmt.Println("completing handshake ...")
-	// 			err = tlsConn.Handshake()
-	// 			if err != nil {
-	// 				fmt.Println("ERROR:", err.Error())
-	// 				tlsConn.Close()
-	// 				continue
-	// 			}
-	// 		}
-	// 		state := tlsConn.ConnectionState()
-	// 		fmt.Println("TLS connection:")
-	// 		fmt.Println("  DidResume:", state.DidResume)
-	// 		fmt.Printf("  CipherSuite: 0x%04x\n", state.CipherSuite)
-	// 		fmt.Printf("  Version: 0x%04x\n", state.Version)
-	// 		if len(state.PeerCertificates) > 0 {
-	// 			fmt.Println("  Peer certificates:", len(state.PeerCertificates))
-	// 			fmt.Println("  Peer 1 Issuer:", state.PeerCertificates[0].Issuer.ToRDNSequence())
-	// 			fmt.Println("  Peer 1 Subject:", state.PeerCertificates[0].Subject.ToRDNSequence())
-	// 			fmt.Println("  Peer 1 Serial Number:", hex.EncodeToString(state.PeerCertificates[0].SerialNumber.Bytes()))
-	// 			fmt.Println("  Peer 1 Subject Key ID:", hex.EncodeToString(state.PeerCertificates[0].SubjectKeyId))
-	// 			fmt.Println("  Peer 1 Authority ID:", hex.EncodeToString(state.PeerCertificates[0].AuthorityKeyId))
-	// 			// matches the output shown in browsers and openssl -text
-	// 			pubKey, err := marshalPublicKey(state.PeerCertificates[0].PublicKey)
-	// 			if err != nil {
-	// 				panic(err)
-	// 			}
-	// 			fmt.Println("  Peer 1 Public Key:", hex.EncodeToString(pubKey))
-	// 		}
-	// 	}
-
-	// 	var input []byte
-	// 	if *msglen > 0 {
-	// 		input = make([]byte, *msglen)
-	// 		_, err = io.ReadFull(c, input)
-	// 	} else {
-	// 		input, err = ioutil.ReadAll(c)
-	// 	}
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	fmt.Printf("Read %d bytes; echoing\n", len(input))
-
-	// 	_, err = c.Write(input)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	fmt.Println("Wrote; closing socket")
-	// 	err = c.Close()
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// }
 }

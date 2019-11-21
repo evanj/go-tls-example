@@ -4,6 +4,7 @@ An example of using self-signed TLS keys and certificates with Go clients and se
 how to use client certificates to authenticate TCP and HTTP connections. We generate the
 certificates using the openssl command-line tool, then reads them using Go clients and servers.
 
+
 ## Programs
 
 * `echoclient`: TLS echo server: reads from stdin, writes to the server, reads from server, then prints on stdout.
@@ -11,9 +12,31 @@ certificates using the openssl command-line tool, then reads them using Go clien
 * `endtoend`: Runs the echoclient and echoserver in various combinations to ensure they work.
 
 
+## echoserver
+
+A basic TCP echo server that prints details about incoming TLS connections, including the cipher suite, TLS version, and peer certificate details. For example:
+
+```
+echoserver 98.0.184.126:61066: connection started
+echoserver 98.0.184.126:61066: completing TLS handshake ...
+echoserver 98.0.184.126:61066:   DidResume: false
+echoserver 98.0.184.126:61066:   CipherSuite: 0x1301 (TLS_AES_128_GCM_SHA256)
+echoserver 98.0.184.126:61066:   Version: 0x0304 (TLS13)
+echoserver 98.0.184.126:61066:   Peer certificates: 1
+echoserver 98.0.184.126:61066:   Peer 1 Issuer: CN=Example Inc Root CA,O=Example Inc
+echoserver 98.0.184.126:61066:   Peer 1 Subject: CN=clientcert.example.com,O=Example Inc
+echoserver 98.0.184.126:61066:   Peer 1 Serial Number: dbd262a8686870d3
+echoserver 98.0.184.126:61066:   Peer 1 Subject Key ID:
+echoserver 98.0.184.126:61066:   Peer 1 Authority ID:
+echoserver 98.0.184.126:61066:   Peer 1 Public Key: 04ffb7ffe...5dd258
+```
+
+
+
 ## Generating keys
 
 For more secure and robust configuration, see https://jamielinux.com/docs/openssl-certificate-authority/introduction.html
+
 
 ### Generate the certificate authority key
 
