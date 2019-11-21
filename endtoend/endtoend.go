@@ -109,6 +109,7 @@ func main() {
 	clientTrustedRoot := []string{"--trustedRoot=" + *caCertPath}
 	clientTrustedRootAndCert := append(clientTrustedRoot,
 		"--cert="+*clientCertPath, "--key="+*clientKeyPath)
+	clientTrustedRootSessionCache := append(clientTrustedRoot, "--useSessionCache")
 
 	configs := []*testConfiguration{
 		{"no TLS (plain TCP)", []string{"--useTLS=false"}, []string{}, expectedSuccessOutput, false},
@@ -137,6 +138,10 @@ func main() {
 		// client and server have valid certificates
 		{"both have certificates", clientTrustedRootAndCert, serverArgsWithClientCerts,
 			expectedSuccessOutput, false},
+
+		// client and server enabled session caching
+		{"session caching", clientTrustedRootSessionCache, serverCertKeyArgs,
+			"resumed TLS session? true", false},
 	}
 
 	for i, config := range configs {
