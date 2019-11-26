@@ -12,6 +12,7 @@ import (
 	"os"
 )
 
+// ClientConfig contains the configuration for example clients.
 type ClientConfig struct {
 	UseTLS          bool
 	UseSessionCache bool
@@ -19,15 +20,17 @@ type ClientConfig struct {
 	Addr            string
 }
 
+// Logf prints log messages like fmt.Printf.
 type Logf func(message string, args ...interface{})
 
+// PrefixLogf returns a function that logs prefix before the rest of the message.
 func PrefixLogf(prefix string) Logf {
 	return func(message string, args ...interface{}) {
 		fmt.Printf(prefix+message, args...)
 	}
 }
 
-// Returns the *Config from command line arguments.
+// ParseClient returns a ClientConfig from command line arguments.
 func ParseClient(logf Logf) (*ClientConfig, error) {
 	addr := flag.String("addr", "localhost:7000", "echo server address")
 	useTLS := flag.Bool("useTLS", true, "Use TLS. If false, uses an unencrypted TCP connection")
@@ -87,11 +90,13 @@ func ParseClient(logf Logf) (*ClientConfig, error) {
 	}, nil
 }
 
+// ServerConfig contains the configuration for example servers.
 type ServerConfig struct {
 	Addr      string
 	TLSConfig *tls.Config
 }
 
+// ParseServer returns a ServerConfig from command line arguments.
 func ParseServer(logf Logf) (*ServerConfig, error) {
 	addr := flag.String("addr", "localhost:7000", "listen address")
 	certPath := flag.String("cert", "", "path to the server cert")
