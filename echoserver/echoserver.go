@@ -6,13 +6,11 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
-	"errors"
-	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
+
+	"github.com/evanj/go-tls-example/cmdline"
 )
 
 // from https://golang.org/src/crypto/tls/cipher_suites.go
@@ -117,56 +115,19 @@ func handleConnGoroutine(conn net.Conn) {
 	}
 }
 
-func listenTLS(
-	addr string, serverCertPath string, serverKeyPath string, clientCARootCertPath string,
-) (net.Listener, error) {
-	cert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var certPool *x509.CertPool
-	clientAuth := tls.NoClientCert
-	if clientCARootCertPath != "" {
-		certBytes, err := ioutil.ReadFile(clientCARootCertPath)
-		if err != nil {
-			return nil, err
-		}
-
-		certPool = x509.NewCertPool()
-		ok := certPool.AppendCertsFromPEM(certBytes)
-		if !ok {
-			return nil, errors.New("caCert did not contain any certificates")
-		}
-		clientAuth = tls.RequireAndVerifyClientCert
-		fmt.Printf("echoserver: requiring cert=%s for verifying client certificates\n", clientCARootCertPath)
-	}
-
-	cfg := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		ClientCAs:    certPool,
-		ClientAuth:   clientAuth,
-	}
-	return tls.Listen("tcp", addr, cfg)
-}
-
 func main() {
-	addr := flag.String("addr", "localhost:7000", "listen address")
-	certPath := flag.String("cert", "", "path to the server cert")
-	keyPath := flag.String("key", "", "path to the server key")
-	clientCARootCertPath := flag.String("clientCARootCert", "",
-		"Path to the root CA certificate to verify client certs")
-	flag.Parse()
+	config, err := cmdline.ParseServer(cmdline.PrefixLogf("echoserver: "))
+	if err != nil {
+		panic(err)
+	}
 
 	var listener net.Listener
-	var err error
-	if *certPath != "" {
-		fmt.Printf("echoserver listening for TLS with addr=%s cert=%s key=%s\n",
-			*addr, *certPath, *keyPath)
-		listener, err = listenTLS(*addr, *certPath, *keyPath, *clientCARootCertPath)
+	if config.TLSConfig != nil {
+		fmt.Printf("echoserver listening for TLS with addr=%s\n", config.Addr)
+		listener, err = tls.Listen("tcp", config.Addr, config.TLSConfig)
 	} else {
-		fmt.Printf("echoserver listening without TLS with addr=%s\n", *addr)
-		listener, err = net.Listen("tcp", *addr)
+		fmt.Printf("echoserver listening without TLS with addr=%s\n", config.Addr)
+		listener, err = net.Listen("tcp", config.Addr)
 	}
 	if err != nil {
 		panic(err)
